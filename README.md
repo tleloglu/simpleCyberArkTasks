@@ -55,3 +55,17 @@ CAList -type Accounts -id 37_3 -Activity $true                               # L
 
 CAList -type SafeMembers -SafeUrlId Safe1                                    # Lists Safe1 safe members.
 
+### CACreatePermissionTable
+
+Just create a permission table template for permissions. Tested for Cyberark PAS 11.2
+
+### CAGetPermissionsTable
+
+Creates a table, which lists permissions for safe users.
+
+### CAGetPermissionsTableCSV (under development)
+
+Creates a CSV file in the same directory with named as test.csv. 
+
+![Screenshot](https://user-images.githubusercontent.com/60000782/110939894-22852580-8347-11eb-859e-d4693714b4a0.png)
+
