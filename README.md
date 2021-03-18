@@ -57,15 +57,68 @@ CAList -type SafeMembers -SafeUrlId Safe1                                    # L
 
 ### CACreatePermissionTable
 
-Just create a permission table template for permissions. Tested for Cyberark PAS 11.2
+Just create a permission table template for permissions. Tested for Cyberark PAS 11.2.
+
+#### Switches
+
+**type       :** Specify table type to be created. Acceptable values are 'Permission','AccountActivity'. Required.
+
+#### Example
+
+CAGetPermissionsTable -type AccountActivity                                  # Creates AccountActivity table template.
 
 ### CAGetPermissionsTable
 
 Creates a table, which lists permissions for safe users.
 
-### CAGetPermissionsTableCSV (under development)
+#### Switches
 
-Creates a CSV file in the same directory with named as test.csv. 
+**Export2CSV :** After the switch specify the path of the csv file.
 
-![Screenshot](https://user-images.githubusercontent.com/60000782/110939894-22852580-8347-11eb-859e-d4693714b4a0.png)
+#### Example
+
+CAGetPermissionsTable -Export2CSV c:\test\perms.csv
+
+### CAInfo2HashTable
+
+This function converts Activities' moreInfo string value to hash table. 
+
+#### Switches
+
+**Infos      :** After the switch you can specify the csv file path to be exported.
+
+#### Example
+
+CAInfo2HashTable -Infos $Activity.moreInfo
+
+### CAGetAccountUseDetails
+
+Lists the activities of CyberArk Accounts like who logged in,when logged in and logged out, duration etc.
+
+#### Switches
+
+**Export2CSV :** After the switch specify the path of the csv file. Optional.
+
+**id         :** id of the Account. You can get it ids from 'CAList -type Accounts'. Required.
+
+#### Example
+
+CAGetAccountUseDetails -id 33_2                                              # Lists activities on account with id.
+
+### CAGetUserUseDetails
+
+Lists the activities of users like who logged in,when logged in and logged out, duration etc.
+
+#### Switches
+
+**Export2CSV :** After the switch specify the path of the csv file. Optional.
+
+**user       :** id of the Account. You can get it ids from 'CAList -type Accounts'. Required.
+
+#### Example
+
+CAGetAccountUseDetails -id john.doe                                           # Lists activities on account with username.  
+
+
+
 
