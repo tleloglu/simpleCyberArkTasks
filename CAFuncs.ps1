@@ -9,6 +9,9 @@ function CALogon()  {
         [parameter(Mandatory=$false)] [Boolean] $AskPass = $false
     )
     
+    $origin = New-Object -Type DateTime -ArgumentList 1970, 1, 1, 0, 0, 0, 0
+    $global:origin=$origin
+    $global:CAError=$true
     if(($AskPass -eq $True) -and ($pass -ne "")) {
         return "You cannot use pass and askpass:true at the same time"
     }
@@ -60,12 +63,23 @@ function CALogon()  {
     $yer=$url.IndexOf('/api/')
     $uri=$url.substring(0,$yer)
     $global:uri=$uri
-    if ($ignoreCert -eq $true) {
-        $global:token =Invoke-RestMethod -Method Post -Uri $url -Body $body -ContentType "application/json"  -SkipCertificateCheck
+    try {
+        if ($ignoreCert -eq $true) {
+            $global:token =Invoke-RestMethod -Method Post -Uri $url -Body $body -ContentType "application/json"  -SkipCertificateCheck
+            $global:CAError=$false
+        }
+        else {
+            $global:token =Invoke-RestMethod -Method Post -Uri $url -Body $body -ContentType "application/json"
+            $global:CAError=$false
+        }
+        return "Successfully logged in to " + $uri
     }
-    else {
-        $global:token =Invoke-RestMethod -Method Post -Uri $url -Body $body -ContentType "application/json"
+    catch {
+        $errorx="Error Reason: " + $_.ErrorDetails.Message
+        $global:CAError=$true
+        return $errorx
     }
+
 
     
     
@@ -138,9 +152,11 @@ function CAList() {
                 break
             }
         }
+        $global:CAError=$false
     }
     catch {
         $errorx="Error Reason: " + $_.Exception.response.ReasonPhrase  
+        $global:CAError=$true
         return $errorx
         
     }
@@ -150,49 +166,78 @@ function CAList() {
 
 }
 
-function CACreatePermissionTable() {
-    $perms=@("UseAccounts",
-    "RetrieveAccounts",
-    "ListAccounts",
-    "AddAccounts",
-    "UpdateAccountContent",
-    "UpdateAccountProperties",
-    "InitiateCPMAccountManagementOperations",
-    "SpecifyNextAccountContent",
-    "RenameAccounts",
-    "DeleteAccounts",
-    "UnlockAccounts",
-    "ManageSafe",
-    "ManageSafeMembers",
-    "BackupSafe",
-    "ViewAuditLog",
-    "ViewSafeMembers",
-    "AccessWithoutConfirmation",
-    "CreateFolders",
-    "DeleteFolders",
-    "MoveAccountsAndFolders",
-    "RequestsAuthorizationLevel1",
-    "RequestsAuthorizationLevel2")
-
-    $tbl = New-Object System.Data.DataTable "Members-Permissions"
-    $col = New-Object System.Data.DataColumn Safe
-    $tbl.Columns.Add($col)
-    $col = New-Object System.Data.DataColumn "Member"
-    $tbl.Columns.Add($col)
-    $col = New-Object System.Data.DataColumn "Predifined"
-    $tbl.Columns.Add($col)
-    foreach($perm in $perms) {
-        $col = New-Object System.Data.DataColumn $perm
-        $tbl.Columns.Add($col)
+function CACreateTable() {
+    Param( 
+        [parameter(Mandatory=$true)] [ValidateSet('Permission','AccountActivity')] [String] $type
+    )
+    switch($type) {
+        "Permission" {
+            $perms=@("UseAccounts",
+            "RetrieveAccounts",
+            "ListAccounts",
+            "AddAccounts",
+            "UpdateAccountContent",
+            "UpdateAccountProperties",
+            "InitiateCPMAccountManagementOperations",
+            "SpecifyNextAccountContent",
+            "RenameAccounts",
+            "DeleteAccounts",
+            "UnlockAccounts",
+            "ManageSafe",
+            "ManageSafeMembers",
+            "BackupSafe",
+            "ViewAuditLog",
+            "ViewSafeMembers",
+            "AccessWithoutConfirmation",
+            "CreateFolders",
+            "DeleteFolders",
+            "MoveAccountsAndFolders",
+            "RequestsAuthorizationLevel1",
+            "RequestsAuthorizationLevel2")
+        
+            $tbl = New-Object System.Data.DataTable "Members-Permissions"
+            $col = New-Object System.Data.DataColumn Safe
+            $tbl.Columns.Add($col)
+            $col = New-Object System.Data.DataColumn "Member"
+            $tbl.Columns.Add($col)
+            $col = New-Object System.Data.DataColumn "Predifined"
+            $tbl.Columns.Add($col)
+            foreach($perm in $perms) {
+                $col = New-Object System.Data.DataColumn $perm
+                $tbl.Columns.Add($col)
+            }
+        }
+        "AccountActivity" {
+            $cols=@("Account",
+            "Safe",
+            "DateIn",
+            "DateOut",
+            "Duration",
+            "SourceAddr",
+            "SourceUser",
+            "PSM",
+            "AccountAddr",
+            "AccountUser",
+            "Protocol",
+            "SessionID")
+            $tbl = New-Object System.Data.DataTable "AccountActivities"
+            foreach($colx in $cols) {
+                $col = New-Object System.Data.DataColumn $colx
+                $tbl.Columns.Add($col)
+            }
+            break
+        }
     }
-
     return ,$tbl
-
 }
 
 
 function CAGetPermissionsTable() {
-    $tbl=CACreatePermissionTable
+    Param( 
+        [parameter(Mandatory=$false)] [String] $Export2CSV
+    )
+
+    $tbl=CACreateTable -type "Permission"
     $Safes=CAList -type Safes
     foreach($Safe in $Safes) {
         $Perms=CAList -type SafeMembers -SafeUrlId $Safe.SafeUrlId
@@ -208,10 +253,133 @@ function CAGetPermissionsTable() {
 
         }
     }
-    return $tbl
+    if($Export2CSV -eq "") {
+      return ,$tbl  
+    }
+    else{
+        $tbl | Export-Csv -path $Export2CSV -NoTypeInformation
+    }
+    
 }
 
-function CAGetPermissionsTableCSV() {
-    $tbl=CAGetPermissionsTable
-    $tbl | Export-Csv -path .\test.csv -NoTypeInformation
+
+function CAInfo2HashTable($Infos) {
+    $Infos=$Infos.Split(",")
+    $hashtable = @{}
+    foreach($Info in $Infos) {
+        $Ins=$Info.Split(":")
+        if($Ins[0].Trim() -eq "Session Duration") {
+            $Sdr=""
+            for($i=1;$i -lt $Ins.count;$i++) {
+                $Sdr=$Sdr + ":" + $Ins[$i].trim() 
+            }
+            $Sdr=$Sdr.Substring(1)
+            $hashtable.Add($Ins[0].Trim(),$Sdr)
+        }
+        else{
+            $hashtable.Add($Ins[0].Trim(),$Ins[1].Trim())
+        }
+        
+    }
+    return $hashtable
+}
+
+function CAGetAccountUseDetails() {
+    Param( 
+        [parameter(Mandatory=$false)] [String] $Export2CSV,
+        [parameter(Mandatory=$true)] [String] $id
+    )
+    $tbl=CACreateTable -type "AccountActivity"
+    $Activities=CAList -type Accounts -id $id -Activity:$true
+    if($CAError -eq $true) {
+        return "You must login to the PVWA."
+    }
+    $AccountInfo=CAList -type Accounts -id $id
+    $Connects=$Activities | Where-Object { $_.Action -eq "PSM Connect" }
+    foreach ($connect in $Connects) {
+        $row = $tbl.NewRow()
+        $row.Account=$AccountInfo.Name
+        $row.Safe=$AccountInfo.safeName
+        $row.AccountAddr=$AccountInfo.address
+        $row.AccountUser=$AccountInfo.Username
+        $hash1=CAInfo2HashTable($connect.MoreInfo)
+        $row.SessionID=$hash1['Session ID']
+        $row.Protocol=$hash1['Protocol']
+        $row.SourceAddr=$hash1['Source Address']
+        $row.SourceUser=$Connect.User
+        $row.DateIn=$Connect.Date
+        $row.PSM=$hash1['PSM Server']
+        $tbl.Rows.Add($row)
+    }
+
+    $DisConnects=$Activities | Where-Object { $_.Action -eq "PSM Disconnect" }
+    foreach ($disconnect in $DisConnects) {
+        $hash2=CAInfo2HashTable($disconnect.MoreInfo)
+        $tbl | where-object {$_.SessionID -eq $hash2['Session ID']} | foreach-object {$_.Duration=$disConnect.Date-$_.DateIn;$_.DateOut=$origin.AddSeconds($disConnect.Date);$_.DateIn=$origin.AddSeconds($_.DateIn)}
+    }
+    $tbl | where-object {$_.DateOut.GetType().Name -eq "DBNull" } | foreach-object {$_.DateIn=$origin.AddSeconds($_.DateIn)}
+       
+    
+    if($Export2CSV -eq "") {
+        return ,$tbl  
+      }
+      else{
+          $tbl | Export-Csv -path $Export2CSV -NoTypeInformation
+      }
+
+}
+
+
+
+function CAGetUserUseDetails() {
+    Param( 
+        [parameter(Mandatory=$false)] [String] $Export2CSV,
+        [parameter(Mandatory=$true)] [String] $user
+    )
+    $tbl=CACreateTable -type "AccountActivity"
+    $Accounts=CAList -type Accounts
+    if($CAError -eq $true) {
+        return "You must login to the PVWA."
+    }
+    foreach($Account in $Accounts) {
+        $Activities=CAList -type Accounts -id $Account.id -Activity:$true
+        if($CAError -eq $true) {
+            return "You must login to the PVWA."
+        }
+        $AccountInfo=CAList -type Accounts -id $Account.id 
+        $Connects=$Activities | Where-Object { $_.Action -eq "PSM Connect" }
+        foreach ($connect in $Connects) {
+            $row = $tbl.NewRow()
+            $row.Account=$AccountInfo.Name
+            $row.Safe=$AccountInfo.safeName
+            $row.AccountAddr=$AccountInfo.address
+            $row.AccountUser=$AccountInfo.Username
+            $hash1=CAInfo2HashTable($connect.MoreInfo)
+            $row.SessionID=$hash1['Session ID']
+            $row.Protocol=$hash1['Protocol']
+            $row.SourceAddr=$hash1['Source Address']
+            $row.SourceUser=$Connect.User
+            $row.DateIn=$Connect.Date
+            $row.PSM=$hash1['PSM Server']
+            $tbl.Rows.Add($row)
+        }
+    
+        $DisConnects=$Activities | Where-Object { $_.Action -eq "PSM Disconnect" }
+        foreach ($disconnect in $DisConnects) {
+            $hash2=CAInfo2HashTable($disconnect.MoreInfo)
+            $tbl | where-object {$_.SessionID -eq $hash2['Session ID']} | foreach-object {$_.Duration=$disConnect.Date-$_.DateIn;$_.DateOut=$origin.AddSeconds($disConnect.Date);$_.DateIn=$origin.AddSeconds($_.DateIn)}
+        }
+        $tbl | where-object {$_.DateOut.GetType().Name -eq "DBNull" } | foreach-object {$_.DateIn=$origin.AddSeconds($_.DateIn)}
+    }
+    $tbl=$tbl | where-object {$_.SourceUser -eq $user }
+
+    if($Export2CSV -eq "") {
+        return ,$tbl  
+      }
+      else{
+          $tbl | Export-Csv -path $Export2CSV -NoTypeInformation
+      }
+
+
+
 }
