@@ -343,9 +343,6 @@ function CAGetUserUseDetails() {
     }
     foreach($Account in $Accounts) {
         $Activities=CAList -type Accounts -id $Account.id -Activity:$true
-        if($CAError -eq $true) {
-            return "You must login to the PVWA."
-        }
         $AccountInfo=CAList -type Accounts -id $Account.id 
         $Connects=$Activities | Where-Object { $_.Action -eq "PSM Connect" }
         foreach ($connect in $Connects) {
